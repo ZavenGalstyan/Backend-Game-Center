@@ -3,7 +3,7 @@
 const app = require('./app');
 const env = require('./config/env');
 const logger = require('./utils/logger');
-const { connectDatabase, disconnectDatabase } = require('./config/database');
+const { connectDatabase, disconnectDatabase, redactCredentials } = require('./config/database');
 
 let server;
 
@@ -16,7 +16,8 @@ async function start() {
       logger.info(`Swagger UI:  http://localhost:${env.port}/api-docs`);
     });
   } catch (err) {
-    logger.error('Failed to start server:', err.message);
+    // Database connection is required - fail fast, without leaking credentials.
+    logger.error('Failed to start server:', redactCredentials(err.message));
     process.exit(1);
   }
 }

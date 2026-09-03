@@ -24,6 +24,7 @@ const definition = {
   ],
   tags: [
     { name: 'Auth', description: 'Registration, login and account endpoints' },
+    { name: 'Users', description: 'User management (admin)' },
     { name: 'System', description: 'Service/health endpoints' },
   ],
   components: {
@@ -106,6 +107,34 @@ const definition = {
               accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
               tokenType: { type: 'string', example: 'Bearer' },
               user: { $ref: '#/components/schemas/User' },
+            },
+          },
+        },
+      },
+      Pagination: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', example: 1 },
+          limit: { type: 'integer', example: 10 },
+          total: { type: 'integer', example: 42 },
+          totalPages: { type: 'integer', example: 5 },
+          hasNextPage: { type: 'boolean', example: true },
+          hasPrevPage: { type: 'boolean', example: false },
+        },
+      },
+      PaginatedUsersResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Users retrieved successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              users: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/User' },
+              },
+              pagination: { $ref: '#/components/schemas/Pagination' },
             },
           },
         },

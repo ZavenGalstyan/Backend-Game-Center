@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "seed:admin": "node src/scripts/seedAdmin.js",
     "lint": "echo \"No linter configured yet\" && exit 0"
   },
   "keywords": [

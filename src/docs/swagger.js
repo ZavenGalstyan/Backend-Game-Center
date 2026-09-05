@@ -20,7 +20,9 @@ const definition = {
       'only the ones marked with a lock require a Bearer token.',
   },
   servers: [
-    { url: `http://localhost:${env.port}`, description: 'Local development' },
+    env.apiBaseUrl
+      ? { url: env.apiBaseUrl, description: 'Current environment' }
+      : { url: `http://localhost:${env.port}`, description: 'Local development' },
   ],
   tags: [
     { name: 'Auth', description: 'Registration, login and account endpoints' },

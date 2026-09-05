@@ -34,6 +34,11 @@ const env = {
   bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS, 10) || 12,
 
   corsOrigin: process.env.CORS_ORIGIN || '*',
+
+  // Public base URL of this API (e.g. https://backend-game-center.onrender.com).
+  // Used by Swagger to build the "servers" entry. Falls back to localhost:PORT
+  // for local development when unset.
+  apiBaseUrl: process.env.API_BASE_URL || '',
 };
 
 env.isProduction = env.nodeEnv === 'production';

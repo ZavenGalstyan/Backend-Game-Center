@@ -1,6 +1,6 @@
 'use strict';
 
-const { query } = require('express-validator');
+const { query, param } = require('express-validator');
 const { ROLE_VALUES } = require('../config/roles');
 
 const listUsersRules = [
@@ -22,4 +22,8 @@ const listUsersRules = [
     .withMessage(`role must be one of: ${ROLE_VALUES.join(', ')}`),
 ];
 
-module.exports = { listUsersRules };
+const deleteUserRules = [
+  param('id').isMongoId().withMessage('id must be a valid MongoDB ObjectId'),
+];
+
+module.exports = { listUsersRules, deleteUserRules };

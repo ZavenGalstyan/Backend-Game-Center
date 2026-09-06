@@ -2,6 +2,7 @@
 
 const User = require('../models/user.model');
 const { ROLE_VALUES } = require('../config/roles');
+const ApiError = require('../utils/ApiError');
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -45,4 +46,17 @@ async function listUsers({ page = 1, limit = DEFAULT_LIMIT, role } = {}) {
   };
 }
 
-module.exports = { listUsers };
+/**
+ * Delete a user by id.
+ *
+ * @param {string} id Mongo ObjectId (already validated by the route)
+ * @throws {ApiError} 404 if no user exists with that id
+ */
+async function deleteUser(id) {
+  const deleted = await User.findByIdAndDelete(id);
+  if (!deleted) {
+    throw ApiError.notFound('User not found');
+  }
+}
+
+module.exports = { listUsers, deleteUser };

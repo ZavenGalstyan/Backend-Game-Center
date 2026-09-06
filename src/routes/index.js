@@ -3,6 +3,8 @@
 const express = require('express');
 const authRoutes = require('./auth.routes');
 const userRoutes = require('./user.routes');
+const gameTypeRoutes = require('./gameType.routes');
+const gameRoutes = require('./game.routes');
 
 const router = express.Router();
 
@@ -36,8 +38,10 @@ router.get('/health', (_req, res) => {
   });
 });
 
-// Feature modules. Add more here later (games, scores, ...).
+// Feature modules. Add more here later (scores, ...).
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/game-types', gameTypeRoutes);
+router.use('/games', gameRoutes);
 
 module.exports = router;

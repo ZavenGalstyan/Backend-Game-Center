@@ -19,4 +19,17 @@ const listUsers = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { listUsers };
+/**
+ * DELETE /api/users/:id  (protected: admin)
+ * Delete a user by id.
+ */
+const deleteUser = asyncHandler(async (req, res) => {
+  await userService.deleteUser(req.params.id);
+
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: 'User deleted successfully',
+  });
+});
+
+module.exports = { listUsers, deleteUser };

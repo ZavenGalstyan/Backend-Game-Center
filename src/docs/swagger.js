@@ -27,6 +27,8 @@ const definition = {
   tags: [
     { name: 'Auth', description: 'Registration, login and account endpoints' },
     { name: 'Users', description: 'User management (admin)' },
+    { name: 'GameTypes', description: 'Game categories/types (public reads, admin writes)' },
+    { name: 'Games', description: 'Game catalogue (public reads, admin writes)' },
     { name: 'System', description: 'Service/health endpoints' },
   ],
   components: {
@@ -156,6 +158,158 @@ const definition = {
               },
             },
           },
+        },
+      },
+
+      /* ------------------------------ Game types ----------------------------- */
+      GameType: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665f1b2c9d1e4a0012a3b4c5' },
+          name: { type: 'string', example: 'Puzzle' },
+          slug: { type: 'string', example: 'puzzle' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreateGameTypeRequest: {
+        type: 'object',
+        required: ['name', 'slug'],
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 60, example: 'Educational' },
+          slug: {
+            type: 'string',
+            minLength: 2,
+            maxLength: 60,
+            pattern: '^[a-z0-9_]+$',
+            description: 'Lowercase; letters, numbers and underscores only. Stored normalised.',
+            example: 'educational',
+          },
+        },
+      },
+      UpdateGameTypeRequest: {
+        type: 'object',
+        minProperties: 1,
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 60, example: 'Educational Games' },
+          slug: {
+            type: 'string',
+            minLength: 2,
+            maxLength: 60,
+            pattern: '^[a-z0-9_]+$',
+            example: 'educational_games',
+          },
+        },
+      },
+      GameTypeResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Game type retrieved successfully' },
+          data: { $ref: '#/components/schemas/GameType' },
+        },
+      },
+      GameTypeListResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Game types retrieved successfully' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/GameType' },
+          },
+        },
+      },
+
+      /* -------------------------------- Games -------------------------------- */
+      GameTypeRef: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665f1b2c9d1e4a0012a3b4c5' },
+          name: { type: 'string', example: 'Puzzle' },
+          slug: { type: 'string', example: 'puzzle' },
+        },
+      },
+      Game: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '665f2a1b9d1e4a0012a3b4d9' },
+          name: { type: 'string', example: 'Light Puzzle' },
+          description: { type: 'string', example: 'A light reflection puzzle game.' },
+          type: { $ref: '#/components/schemas/GameTypeRef' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreateGameRequest: {
+        type: 'object',
+        required: ['name', 'description', 'typeId'],
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Light Puzzle' },
+          description: {
+            type: 'string',
+            minLength: 2,
+            maxLength: 2000,
+            example: 'A light reflection puzzle game.',
+          },
+          typeId: {
+            type: 'string',
+            description: 'MongoDB ObjectId of a GameType. Get valid ids from GET /api/game-types.',
+            example: '665f1b2c9d1e4a0012a3b4c5',
+          },
+        },
+      },
+      UpdateGameRequest: {
+        type: 'object',
+        minProperties: 1,
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Light Puzzle 2' },
+          description: { type: 'string', minLength: 2, maxLength: 2000, example: 'Updated description.' },
+          typeId: {
+            type: 'string',
+            description: 'MongoDB ObjectId of a GameType (from GET /api/game-types).',
+            example: '665f1b2c9d1e4a0012a3b4c5',
+          },
+        },
+      },
+      GameResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Game retrieved successfully' },
+          data: { $ref: '#/components/schemas/Game' },
+        },
+      },
+      GamePagination: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', example: 10 },
+          offset: { type: 'integer', example: 0 },
+          total: { type: 'integer', example: 35 },
+          returned: { type: 'integer', example: 10 },
+          hasMore: { type: 'boolean', example: true },
+          nextOffset: { type: 'integer', nullable: true, example: 10 },
+        },
+      },
+      GameListResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Games retrieved successfully' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Game' },
+          },
+          pagination: { $ref: '#/components/schemas/GamePagination' },
+        },
+      },
+
+      MessageResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Deleted successfully' },
+          data: { type: 'object', nullable: true, example: null },
         },
       },
     },

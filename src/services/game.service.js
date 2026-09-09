@@ -2,6 +2,7 @@
 
 const Game = require('../models/game.model');
 const GameType = require('../models/gameType.model');
+const gameLikeService = require('./gameLike.service');
 const ApiError = require('../utils/ApiError');
 
 const DEFAULT_LIMIT = 10;
@@ -112,7 +113,8 @@ async function updateGame(id, { name, description, typeId }) {
 }
 
 /**
- * Delete a game by id.
+ * Delete a game by id, then remove every like that pointed at it so no
+ * orphaned GameLike documents are left behind.
  * @throws {ApiError} 404 if not found
  */
 async function deleteGame(id) {
@@ -120,6 +122,7 @@ async function deleteGame(id) {
   if (!deleted) {
     throw ApiError.notFound('Game not found');
   }
+  await gameLikeService.deleteLikesForGame(id);
 }
 
 module.exports = {

@@ -3,6 +3,7 @@
 const express = require('express');
 
 const gameController = require('../controllers/game.controller');
+const gameLikeController = require('../controllers/gameLike.controller');
 const validate = require('../middleware/validate.middleware');
 const { requireAuth, requireRole } = require('../middleware/auth.middleware');
 const {
@@ -11,6 +12,7 @@ const {
   updateGameRules,
   listGamesRules,
 } = require('../validators/game.validator');
+const { gameIdParamRules } = require('../validators/gameLike.validator');
 const { ROLES } = require('../config/roles');
 
 const router = express.Router();
@@ -247,5 +249,164 @@ router
     validate,
     gameController.deleteGame
   );
+
+/**
+ * @openapi
+ * /api/games/{gameId}/like:
+ *   post:
+ *     tags: [Likes]
+ *     summary: Like a game
+ *     description: >
+ *       Adds the authenticated user's like for a game. Idempotent - liking a
+ *       game that is already liked returns 200 without creating a duplicate.
+ *       The user is taken from the JWT; there is no request body.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         description: MongoDB ObjectId of the game
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     responses:
+ *       200:
+ *         description: Game liked (or already liked)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LikeToggleResponse' }
+ *             example:
+ *               success: true
+ *               message: Game liked successfully
+ *               data: { liked: true }
+ *       400:
+ *         description: Malformed gameId
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *   delete:
+ *     tags: [Likes]
+ *     summary: Unlike a game
+ *     description: >
+ *       Removes the authenticated user's like for a game. Idempotent - unliking
+ *       a game that was not liked still returns 200.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     responses:
+ *       200:
+ *         description: Game unliked (or was not liked)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LikeToggleResponse' }
+ *             example:
+ *               success: true
+ *               message: Game unliked successfully
+ *               data: { liked: false }
+ *       400:
+ *         description: Malformed gameId
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *   get:
+ *     tags: [Likes]
+ *     summary: Check whether the current user has liked a game
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     responses:
+ *       200:
+ *         description: Like status for the current user
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LikeToggleResponse' }
+ *             example:
+ *               success: true
+ *               message: Like status retrieved successfully
+ *               data: { liked: true }
+ *       400:
+ *         description: Malformed gameId
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
+router
+  .route('/:gameId/like')
+  .post(requireAuth, gameIdParamRules, validate, gameLikeController.likeGame)
+  .delete(requireAuth, gameIdParamRules, validate, gameLikeController.unlikeGame)
+  .get(requireAuth, gameIdParamRules, validate, gameLikeController.getLikeStatus);
+
+/**
+ * @openapi
+ * /api/games/{gameId}/likes/count:
+ *   get:
+ *     tags: [Likes]
+ *     summary: Get the total number of likes for a game
+ *     description: Public. Returns how many users have liked the game.
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     responses:
+ *       200:
+ *         description: Like count
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LikeCountResponse' }
+ *             example:
+ *               success: true
+ *               message: Like count retrieved successfully
+ *               data: { count: 125 }
+ *       400:
+ *         description: Malformed gameId
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
+router
+  .route('/:gameId/likes/count')
+  .get(gameIdParamRules, validate, gameLikeController.getLikeCount);
 
 module.exports = router;

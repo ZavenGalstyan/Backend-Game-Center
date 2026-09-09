@@ -3,9 +3,11 @@
 const express = require('express');
 
 const userController = require('../controllers/user.controller');
+const gameLikeController = require('../controllers/gameLike.controller');
 const validate = require('../middleware/validate.middleware');
 const { requireAuth, requireRole } = require('../middleware/auth.middleware');
 const { listUsersRules, deleteUserRules } = require('../validators/user.validator');
+const { listLikedGamesRules } = require('../validators/gameLike.validator');
 const { ROLES } = require('../config/roles');
 
 const router = express.Router();
@@ -76,6 +78,53 @@ router.get(
   listUsersRules,
   validate,
   userController.listUsers
+);
+
+/**
+ * @openapi
+ * /api/users/me/liked-games:
+ *   get:
+ *     tags: [Likes]
+ *     summary: List the current user's liked games
+ *     description: >
+ *       Returns the games the authenticated user has liked, most recently
+ *       liked first, with limit/offset pagination. Each item is full game
+ *       info (id, name, description, type) - not just like ids. The user is
+ *       taken from the JWT.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+ *         description: Max number of games to return (default 10, max 100)
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, minimum: 0, default: 0 }
+ *         description: Number of games to skip (default 0)
+ *     responses:
+ *       200:
+ *         description: Paginated list of liked games
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LikedGamesResponse' }
+ *       400:
+ *         description: Invalid limit or offset
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
+router.get(
+  '/me/liked-games',
+  requireAuth,
+  listLikedGamesRules,
+  validate,
+  gameLikeController.getMyLikedGames
 );
 
 /**

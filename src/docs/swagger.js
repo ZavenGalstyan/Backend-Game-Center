@@ -29,6 +29,10 @@ const definition = {
     { name: 'Users', description: 'User management (admin)' },
     { name: 'GameTypes', description: 'Game categories/types (public reads, admin writes)' },
     { name: 'Games', description: 'Game catalogue (public reads, admin writes)' },
+    {
+      name: 'Likes',
+      description: 'Game likes / favourites for the authenticated user (per-user, cross-device)',
+    },
     { name: 'System', description: 'Service/health endpoints' },
   ],
   components: {
@@ -310,6 +314,50 @@ const definition = {
           success: { type: 'boolean', example: true },
           message: { type: 'string', example: 'Deleted successfully' },
           data: { type: 'object', nullable: true, example: null },
+        },
+      },
+
+      /* -------------------------------- Likes -------------------------------- */
+      LikeToggleResponse: {
+        type: 'object',
+        description:
+          'Shared shape for like, unlike and like-status. `data.liked` is the ' +
+          'resulting state for the current user.',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Game liked successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              liked: { type: 'boolean', example: true },
+            },
+          },
+        },
+      },
+      LikeCountResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Like count retrieved successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              count: { type: 'integer', example: 125 },
+            },
+          },
+        },
+      },
+      LikedGamesResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Liked games retrieved successfully' },
+          data: {
+            type: 'array',
+            description: 'Liked games, most recently liked first.',
+            items: { $ref: '#/components/schemas/Game' },
+          },
+          pagination: { $ref: '#/components/schemas/GamePagination' },
         },
       },
     },

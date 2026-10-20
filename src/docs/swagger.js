@@ -228,51 +228,106 @@ const definition = {
       /* -------------------------------- Games -------------------------------- */
       GameTypeRef: {
         type: 'object',
+        description: 'A category (GameType) as referenced from a game.',
         properties: {
           id: { type: 'string', example: '665f1b2c9d1e4a0012a3b4c5' },
-          name: { type: 'string', example: 'Puzzle' },
-          slug: { type: 'string', example: 'puzzle' },
+          name: { type: 'string', example: 'Escape Room' },
+          slug: { type: 'string', example: 'escape_room' },
         },
       },
       Game: {
         type: 'object',
         properties: {
           id: { type: 'string', example: '665f2a1b9d1e4a0012a3b4d9' },
-          name: { type: 'string', example: 'Light Puzzle' },
-          description: { type: 'string', example: 'A light reflection puzzle game.' },
-          type: { $ref: '#/components/schemas/GameTypeRef' },
+          name: { type: 'string', example: 'Haunted Mansion Escape' },
+          description: { type: 'string', example: 'Escape a haunted mansion before midnight.' },
+          mainCategory: {
+            allOf: [{ $ref: '#/components/schemas/GameTypeRef' }],
+            description: 'The single main category of the game.',
+          },
+          secondaryCategories: {
+            type: 'array',
+            description: 'Additional categories (unique, never includes mainCategory). May be empty.',
+            items: { $ref: '#/components/schemas/GameTypeRef' },
+            example: [
+              { id: '665f1b2c9d1e4a0012a3b4c6', name: 'Horror', slug: 'horror' },
+              { id: '665f1b2c9d1e4a0012a3b4c7', name: 'Adventure', slug: 'adventure' },
+              { id: '665f1b2c9d1e4a0012a3b4c8', name: 'Puzzle', slug: 'puzzle' },
+            ],
+          },
+          type: {
+            allOf: [{ $ref: '#/components/schemas/GameTypeRef' }],
+            deprecated: true,
+            description: 'Deprecated alias of mainCategory, kept for older clients.',
+          },
+          categoryMatch: {
+            type: 'string',
+            enum: ['main', 'secondary'],
+            description:
+              'Only present on GET /api/games when filtered by a category: whether the ' +
+              'game matched through its main or a secondary category.',
+            example: 'main',
+          },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
         },
       },
       CreateGameRequest: {
         type: 'object',
-        required: ['name', 'description', 'typeId'],
+        required: ['name', 'description', 'mainCategory'],
         properties: {
-          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Light Puzzle' },
+          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Haunted Mansion Escape' },
           description: {
             type: 'string',
             minLength: 2,
             maxLength: 2000,
-            example: 'A light reflection puzzle game.',
+            example: 'Escape a haunted mansion before midnight.',
+          },
+          mainCategory: {
+            type: 'string',
+            description: 'GameType ObjectId (from GET /api/game-types). Required.',
+            example: '665f1b2c9d1e4a0012a3b4c5',
+          },
+          secondaryCategories: {
+            type: 'array',
+            description:
+              'Optional GameType ObjectIds. Must be unique, must exist and must not ' +
+              'include mainCategory. Defaults to [].',
+            items: { type: 'string' },
+            example: ['665f1b2c9d1e4a0012a3b4c6', '665f1b2c9d1e4a0012a3b4c7', '665f1b2c9d1e4a0012a3b4c8'],
           },
           typeId: {
             type: 'string',
-            description: 'MongoDB ObjectId of a GameType. Get valid ids from GET /api/game-types.',
-            example: '665f1b2c9d1e4a0012a3b4c5',
+            deprecated: true,
+            description: 'Deprecated alias of mainCategory. If both are sent they must match.',
           },
         },
       },
       UpdateGameRequest: {
         type: 'object',
         minProperties: 1,
+        description:
+          'Partial update. Omitted category fields keep their stored value; the ' +
+          'resulting main + secondary combination is validated as a whole. Send ' +
+          '`secondaryCategories: []` to clear them.',
         properties: {
-          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Light Puzzle 2' },
+          name: { type: 'string', minLength: 2, maxLength: 120, example: 'Haunted Mansion Escape 2' },
           description: { type: 'string', minLength: 2, maxLength: 2000, example: 'Updated description.' },
+          mainCategory: {
+            type: 'string',
+            description: 'GameType ObjectId (from GET /api/game-types).',
+            example: '665f1b2c9d1e4a0012a3b4c5',
+          },
+          secondaryCategories: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Replaces the full list of secondary categories.',
+            example: ['665f1b2c9d1e4a0012a3b4c6'],
+          },
           typeId: {
             type: 'string',
-            description: 'MongoDB ObjectId of a GameType (from GET /api/game-types).',
-            example: '665f1b2c9d1e4a0012a3b4c5',
+            deprecated: true,
+            description: 'Deprecated alias of mainCategory.',
           },
         },
       },

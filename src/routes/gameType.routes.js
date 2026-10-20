@@ -173,8 +173,8 @@ router
  *     tags: [GameTypes]
  *     summary: Delete a game type
  *     description: >
- *       Admin only. Fails with 409 if any game still references this type,
- *       to keep game references valid.
+ *       Admin only. Fails with 409 if any game still references this type as
+ *       its main or a secondary category, to keep game references valid.
  *     security:
  *       - bearerAuth: []
  *     parameters:

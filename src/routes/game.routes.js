@@ -31,8 +31,16 @@ const router = express.Router();
  *     tags: [Games]
  *     summary: List games (limit/offset pagination)
  *     description: >
- *       Public. Newest first. Use `limit` + `offset` to page and `typeId` to
- *       filter by game type. The game type is populated on each item.
+ *       Public. Use `limit` + `offset` to page, `categoryId` (or the legacy
+ *       `typeId`) to filter by category and `search` to match name/description.
+ *       Without a category filter games are newest first. With one, a game
+ *       matches when the category is its `mainCategory` OR one of its
+ *       `secondaryCategories`; all main-category matches come first, then all
+ *       secondary-category matches, each group newest first (ties broken by
+ *       id). The ordering is applied before pagination, so it holds across
+ *       pages, `total` counts each game once, and every item carries
+ *       `categoryMatch` (`main` | `secondary`). `mainCategory` and
+ *       `secondaryCategories` are populated on each item.
  *     parameters:
  *       - in: query
  *         name: limit
@@ -43,10 +51,20 @@ const router = express.Router();
  *         schema: { type: integer, minimum: 0, default: 0 }
  *         description: Number of games to skip (default 0)
  *       - in: query
- *         name: typeId
+ *         name: categoryId
  *         schema: { type: string }
  *         description: Optional GameType ObjectId to filter by (from GET /api/game-types)
  *         example: 665f1b2c9d1e4a0012a3b4c5
+ *       - in: query
+ *         name: typeId
+ *         deprecated: true
+ *         schema: { type: string }
+ *         description: Legacy alias of `categoryId` (same main-then-secondary behaviour)
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: Optional case-insensitive match on name or description
+ *         example: mansion
  *     responses:
  *       200:
  *         description: Paginated list of games
@@ -54,8 +72,23 @@ const router = express.Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/GameListResponse'
+ *             example:
+ *               success: true
+ *               message: Games retrieved successfully
+ *               data:
+ *                 - id: 665f2a1b9d1e4a0012a3b4d9
+ *                   name: Haunted Mansion Escape
+ *                   description: Escape a haunted mansion before midnight.
+ *                   mainCategory: { id: 665f1b2c9d1e4a0012a3b4c5, name: Escape Room, slug: escape_room }
+ *                   secondaryCategories:
+ *                     - { id: 665f1b2c9d1e4a0012a3b4c6, name: Horror, slug: horror }
+ *                   type: { id: 665f1b2c9d1e4a0012a3b4c5, name: Escape Room, slug: escape_room }
+ *                   categoryMatch: main
+ *                   createdAt: '2026-10-20T10:00:00.000Z'
+ *                   updatedAt: '2026-10-20T10:00:00.000Z'
+ *               pagination: { limit: 10, offset: 0, total: 1, returned: 1, hasMore: false, nextOffset: null }
  *       400:
- *         description: Invalid limit, offset or typeId
+ *         description: Invalid limit, offset, categoryId, typeId or search
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -63,9 +96,12 @@ const router = express.Router();
  *     tags: [Games]
  *     summary: Create a game
  *     description: >
- *       Admin only. `typeId` must be the ObjectId of an existing GameType -
- *       get valid ids from GET /api/game-types. The created game is returned
- *       with its type populated.
+ *       Admin only. `mainCategory` (required) and `secondaryCategories`
+ *       (optional, default []) are GameType ObjectIds - get valid ids from
+ *       GET /api/game-types. Every id must exist, secondary categories must be
+ *       unique and must not include the main category. The legacy `typeId`
+ *       field is still accepted as an alias of `mainCategory`. The created game
+ *       is returned with its categories populated.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -82,10 +118,19 @@ const router = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/GameResponse'
  *       400:
- *         description: Validation failed
+ *         description: >
+ *           Validation failed - missing mainCategory, malformed ids, duplicate
+ *           secondary categories, main category repeated as secondary, or a
+ *           category that does not exist.
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *             example:
+ *               success: false
+ *               message: Validation failed
+ *               errors:
+ *                 - field: secondaryCategories
+ *                   message: Main category cannot also be a secondary category
  *       401:
  *         description: Missing, invalid or expired token
  *         content:
@@ -93,11 +138,6 @@ const router = express.Router();
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       403:
  *         description: Authenticated but not an admin
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/ErrorResponse' }
- *       404:
- *         description: Referenced game type does not exist
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -119,7 +159,7 @@ router
  *   get:
  *     tags: [Games]
  *     summary: Get a game by id
- *     description: Public. Returns the game with its type populated.
+ *     description: Public. Returns the game with `mainCategory` and `secondaryCategories` populated.
  *     parameters:
  *       - in: path
  *         name: id
@@ -148,9 +188,12 @@ router
  *     tags: [Games]
  *     summary: Update a game
  *     description: >
- *       Admin only. Partial update - send any of `name`, `description`, `typeId`.
- *       If `typeId` is given it must reference an existing GameType.
- *       `_id`, `createdAt` and `updatedAt` cannot be changed.
+ *       Admin only. Partial update - send any of `name`, `description`,
+ *       `mainCategory`, `secondaryCategories` (legacy `typeId` = `mainCategory`).
+ *       `secondaryCategories` replaces the whole list. Omitted category fields
+ *       keep their stored value and the resulting combination is validated
+ *       with the same rules as create. `_id`, `createdAt` and `updatedAt`
+ *       cannot be changed.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -173,7 +216,7 @@ router
  *             schema:
  *               $ref: '#/components/schemas/GameResponse'
  *       400:
- *         description: Validation failed / invalid id
+ *         description: Validation failed (including invalid or non-existent categories) / invalid id
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -188,7 +231,7 @@ router
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }
  *       404:
- *         description: Game or referenced game type not found
+ *         description: Game not found
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ErrorResponse' }

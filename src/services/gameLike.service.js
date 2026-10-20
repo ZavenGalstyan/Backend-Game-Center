@@ -7,7 +7,10 @@ const ApiError = require('../utils/ApiError');
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 
-const TYPE_POPULATE = { path: 'typeId', select: 'name slug' };
+const CATEGORY_POPULATE = [
+  { path: 'mainCategory', select: 'name slug' },
+  { path: 'secondaryCategories', select: 'name slug' },
+];
 
 /**
  * Resolve a game id to its document, or throw 404.
@@ -88,8 +91,8 @@ async function getLikeCount(gameId) {
 
 /**
  * The games a user has liked, most recently liked first, with limit/offset
- * pagination. Returns full game info (not just ids) with the game type
- * populated - one query for the page, one for the count (no N+1).
+ * pagination. Returns full game info (not just ids) with the game's
+ * categories populated - one query for the page, one for the count (no N+1).
  *
  * @returns {Promise<{ items: object[], pagination: object }>}
  */
@@ -108,7 +111,7 @@ async function getLikedGames(userId, { limit, offset } = {}) {
       .sort({ createdAt: -1 })
       .skip(safeOffset)
       .limit(safeLimit)
-      .populate({ path: 'game', populate: TYPE_POPULATE }),
+      .populate({ path: 'game', populate: CATEGORY_POPULATE }),
     GameLike.countDocuments(filter),
   ]);
 

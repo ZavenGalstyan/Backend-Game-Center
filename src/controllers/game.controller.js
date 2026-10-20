@@ -6,10 +6,16 @@ const gameService = require('../services/game.service');
 
 /**
  * POST /api/games  (protected: admin)
+ * The legacy `typeId` field has already been mapped to `mainCategory` by the validator.
  */
 const createGame = asyncHandler(async (req, res) => {
-  const { name, description, typeId } = req.body;
-  const game = await gameService.createGame({ name, description, typeId });
+  const { name, description, mainCategory, secondaryCategories } = req.body;
+  const game = await gameService.createGame({
+    name,
+    description,
+    mainCategory,
+    secondaryCategories,
+  });
 
   return sendSuccess(res, {
     statusCode: 201,
@@ -19,11 +25,17 @@ const createGame = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/games  (public) - limit/offset pagination, optional typeId filter.
+ * GET /api/games  (public) - limit/offset pagination, optional category
+ * filter (`categoryId`, or the legacy `typeId`) and optional `search`.
  */
 const listGames = asyncHandler(async (req, res) => {
-  const { limit, offset, typeId } = req.query;
-  const { items, pagination } = await gameService.listGames({ limit, offset, typeId });
+  const { limit, offset, categoryId, typeId, search } = req.query;
+  const { items, pagination } = await gameService.listGames({
+    limit,
+    offset,
+    categoryId: categoryId || typeId,
+    search,
+  });
 
   return sendSuccess(res, {
     statusCode: 200,
@@ -50,8 +62,13 @@ const getGame = asyncHandler(async (req, res) => {
  * PATCH /api/games/:id  (protected: admin)
  */
 const updateGame = asyncHandler(async (req, res) => {
-  const { name, description, typeId } = req.body;
-  const game = await gameService.updateGame(req.params.id, { name, description, typeId });
+  const { name, description, mainCategory, secondaryCategories } = req.body;
+  const game = await gameService.updateGame(req.params.id, {
+    name,
+    description,
+    mainCategory,
+    secondaryCategories,
+  });
 
   return sendSuccess(res, {
     statusCode: 200,

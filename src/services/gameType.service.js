@@ -101,7 +101,8 @@ async function updateGameType(id, { name, slug }) {
 }
 
 /**
- * Delete a game type - but only if no game references it.
+ * Delete a game type - but only if no game references it as its main or
+ * secondary category.
  * @throws {ApiError} 404 if not found, 409 if still in use
  */
 async function deleteGameType(id) {
@@ -110,7 +111,9 @@ async function deleteGameType(id) {
     throw ApiError.notFound('Game type not found');
   }
 
-  const inUse = await Game.countDocuments({ typeId: type._id });
+  const inUse = await Game.countDocuments({
+    $or: [{ mainCategory: type._id }, { secondaryCategories: type._id }, { typeId: type._id }],
+  });
   if (inUse > 0) {
     throw ApiError.conflict(
       'Game type cannot be deleted because it is used by existing games'

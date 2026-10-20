@@ -4,12 +4,25 @@ const app = require('./app');
 const env = require('./config/env');
 const logger = require('./utils/logger');
 const { connectDatabase, disconnectDatabase, redactCredentials } = require('./config/database');
+const { migrateGameCategories } = require('./migrations/gameCategories.migration');
 
 let server;
 
 async function start() {
   try {
     await connectDatabase();
+
+    // Idempotent and additive - a no-op once every game has been migrated.
+    const migration = await migrateGameCategories();
+    if (migration.mainCategorySet || migration.secondaryCategoriesInitialised) {
+      logger.info(
+        `Game categories migrated: mainCategory set on ${migration.mainCategorySet}, ` +
+          `secondaryCategories initialised on ${migration.secondaryCategoriesInitialised}`
+      );
+    }
+    if (migration.withoutCategory) {
+      logger.warn(`${migration.withoutCategory} game(s) have no category - set one manually`);
+    }
 
     server = app.listen(env.port, () => {
       logger.info(`Server listening on http://localhost:${env.port} (${env.nodeEnv})`);

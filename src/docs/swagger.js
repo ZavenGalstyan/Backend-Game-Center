@@ -33,6 +33,10 @@ const definition = {
       name: 'Likes',
       description: 'Game likes / favourites for the authenticated user (per-user, cross-device)',
     },
+    {
+      name: 'Ratings',
+      description: '1-5 star game ratings - one final rating per user per game; public summaries',
+    },
     { name: 'System', description: 'Service/health endpoints' },
   ],
   components: {
@@ -268,6 +272,21 @@ const definition = {
               'game matched through its main or a secondary category.',
             example: 'main',
           },
+          averageRating: {
+            type: 'number',
+            minimum: 0,
+            maximum: 5,
+            description:
+              'Mean of all submitted ratings, rounded to one decimal. 0 when the game has no ' +
+              'ratings (use ratingsCount to tell "unrated" apart).',
+            example: 4.3,
+          },
+          ratingsCount: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Number of ratings submitted for the game.',
+            example: 24,
+          },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
         },
@@ -402,6 +421,77 @@ const definition = {
           },
         },
       },
+      /* ------------------------------- Ratings ------------------------------- */
+      SubmitRatingRequest: {
+        type: 'object',
+        required: ['rating'],
+        properties: {
+          rating: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 5,
+            description: 'Whole number of stars, sent as a JSON number (not a string).',
+            example: 5,
+          },
+        },
+      },
+      RatingDistribution: {
+        type: 'object',
+        description: 'Number of ratings per star value.',
+        properties: {
+          1: { type: 'integer', example: 1 },
+          2: { type: 'integer', example: 0 },
+          3: { type: 'integer', example: 2 },
+          4: { type: 'integer', example: 9 },
+          5: { type: 'integer', example: 12 },
+        },
+      },
+      RatingSummary: {
+        type: 'object',
+        properties: {
+          averageRating: { type: 'number', minimum: 0, maximum: 5, example: 4.3 },
+          ratingsCount: { type: 'integer', minimum: 0, example: 24 },
+          ratingDistribution: { $ref: '#/components/schemas/RatingDistribution' },
+          myRating: {
+            type: 'integer',
+            nullable: true,
+            minimum: 1,
+            maximum: 5,
+            description: 'The authenticated caller\'s own rating, or null.',
+            example: null,
+          },
+        },
+      },
+      RatingSummaryResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Rating summary retrieved successfully' },
+          data: { $ref: '#/components/schemas/RatingSummary' },
+        },
+      },
+      SubmitRatingResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Rating submitted successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              rating: {
+                type: 'object',
+                properties: {
+                  gameId: { type: 'string', example: '665f2a1b9d1e4a0012a3b4d9' },
+                  rating: { type: 'integer', example: 5 },
+                  createdAt: { type: 'string', format: 'date-time' },
+                },
+              },
+              summary: { $ref: '#/components/schemas/RatingSummary' },
+            },
+          },
+        },
+      },
+
       LikedGamesResponse: {
         type: 'object',
         properties: {

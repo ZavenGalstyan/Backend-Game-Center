@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Game = require('../models/game.model');
 const GameType = require('../models/gameType.model');
 const gameLikeService = require('./gameLike.service');
+const gameRatingService = require('./gameRating.service');
 const ApiError = require('../utils/ApiError');
 
 const DEFAULT_LIMIT = 10;
@@ -82,7 +83,8 @@ async function createGame({ name, description, mainCategory, secondaryCategories
   });
 
   await game.populate(CATEGORY_POPULATE);
-  return game.toPublicJSON();
+  const [item] = await gameRatingService.attachRatingStats([game.toPublicJSON()]);
+  return item;
 }
 
 /** Escape user input for use inside a RegExp. */
@@ -157,6 +159,8 @@ async function listGames({ limit, offset, categoryId, search } = {}) {
     items = docs.map((g) => g.toPublicJSON());
   }
 
+  await gameRatingService.attachRatingStats(items);
+
   const total = await Game.countDocuments(filter);
   const returned = items.length;
   const consumed = safeOffset + returned;
@@ -184,7 +188,8 @@ async function getGameById(id) {
   if (!game) {
     throw ApiError.notFound('Game not found');
   }
-  return game.toPublicJSON();
+  const [item] = await gameRatingService.attachRatingStats([game.toPublicJSON()]);
+  return item;
 }
 
 /**
@@ -216,12 +221,13 @@ async function updateGame(id, { name, description, mainCategory, secondaryCatego
 
   await game.save();
   await game.populate(CATEGORY_POPULATE);
-  return game.toPublicJSON();
+  const [item] = await gameRatingService.attachRatingStats([game.toPublicJSON()]);
+  return item;
 }
 
 /**
- * Delete a game by id, then remove every like that pointed at it so no
- * orphaned GameLike documents are left behind.
+ * Delete a game by id, then remove every like and rating that pointed at it
+ * so no orphaned GameLike / GameRating documents are left behind.
  * @throws {ApiError} 404 if not found
  */
 async function deleteGame(id) {
@@ -229,7 +235,10 @@ async function deleteGame(id) {
   if (!deleted) {
     throw ApiError.notFound('Game not found');
   }
-  await gameLikeService.deleteLikesForGame(id);
+  await Promise.all([
+    gameLikeService.deleteLikesForGame(id),
+    gameRatingService.deleteRatingsForGame(id),
+  ]);
 }
 
 module.exports = {

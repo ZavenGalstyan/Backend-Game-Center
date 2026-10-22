@@ -3,6 +3,7 @@
 const Game = require('../models/game.model');
 const GameLike = require('../models/gameLike.model');
 const ApiError = require('../utils/ApiError');
+const gameRatingService = require('./gameRating.service');
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -92,7 +93,8 @@ async function getLikeCount(gameId) {
 /**
  * The games a user has liked, most recently liked first, with limit/offset
  * pagination. Returns full game info (not just ids) with the game's
- * categories populated - one query for the page, one for the count (no N+1).
+ * categories populated and rating stats attached - one query each for the
+ * page, the count and the ratings (no N+1).
  *
  * @returns {Promise<{ items: object[], pagination: object }>}
  */
@@ -120,6 +122,7 @@ async function getLikedGames(userId, { limit, offset } = {}) {
   const items = likes
     .filter((like) => like.game)
     .map((like) => like.game.toPublicJSON());
+  await gameRatingService.attachRatingStats(items);
 
   const returned = items.length;
   const consumed = safeOffset + likes.length;

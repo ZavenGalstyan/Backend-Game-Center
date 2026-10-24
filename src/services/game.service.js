@@ -6,6 +6,7 @@ const Game = require('../models/game.model');
 const GameType = require('../models/gameType.model');
 const gameLikeService = require('./gameLike.service');
 const gameRatingService = require('./gameRating.service');
+const gameCommentService = require('./gameComment.service');
 const ApiError = require('../utils/ApiError');
 
 const DEFAULT_LIMIT = 10;
@@ -226,8 +227,9 @@ async function updateGame(id, { name, description, mainCategory, secondaryCatego
 }
 
 /**
- * Delete a game by id, then remove every like and rating that pointed at it
- * so no orphaned GameLike / GameRating documents are left behind.
+ * Delete a game by id, then remove every like, rating and comment that pointed
+ * at it so no orphaned GameLike / GameRating / GameComment documents are left
+ * behind.
  * @throws {ApiError} 404 if not found
  */
 async function deleteGame(id) {
@@ -238,6 +240,7 @@ async function deleteGame(id) {
   await Promise.all([
     gameLikeService.deleteLikesForGame(id),
     gameRatingService.deleteRatingsForGame(id),
+    gameCommentService.deleteCommentsForGame(id),
   ]);
 }
 

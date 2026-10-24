@@ -70,6 +70,11 @@ function errorHandler(err, req, res, _next) {
     message: apiError.message,
   };
 
+  // Machine-readable code for errors clients branch on (only some errors set one).
+  if (apiError.code) {
+    body.code = apiError.code;
+  }
+
   if (apiError.details && apiError.details.length > 0) {
     body.errors = apiError.details;
   }

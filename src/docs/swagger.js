@@ -37,6 +37,12 @@ const definition = {
       name: 'Ratings',
       description: '1-5 star game ratings - one final rating per user per game; public summaries',
     },
+    {
+      name: 'Comments',
+      description:
+        'Plain-text game comments - public reads; authenticated owners create/edit/delete; ' +
+        'max 5 comments per user per game',
+    },
     { name: 'System', description: 'Service/health endpoints' },
   ],
   components: {
@@ -156,6 +162,13 @@ const definition = {
         properties: {
           success: { type: 'boolean', example: false },
           message: { type: 'string', example: 'Validation failed' },
+          code: {
+            type: 'string',
+            description:
+              'Machine-readable code, present only on some errors: ' +
+              'COMMENT_LIMIT_REACHED, COMMENT_FORBIDDEN, COMMENT_WRITE_CONFLICT, RATE_LIMITED.',
+            example: 'COMMENT_LIMIT_REACHED',
+          },
           errors: {
             type: 'array',
             items: {
@@ -487,6 +500,114 @@ const definition = {
                 },
               },
               summary: { $ref: '#/components/schemas/RatingSummary' },
+            },
+          },
+        },
+      },
+
+      /* ------------------------------- Comments ------------------------------ */
+      CommentContentRequest: {
+        type: 'object',
+        required: ['content'],
+        properties: {
+          content: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 1000,
+            description:
+              'Plain text. Normalised (NFC, CRLF to LF, control/bidi characters removed, ' +
+              '3+ line breaks collapsed, trimmed) before the 1-1000 character check.',
+            example: 'Loved the final puzzle!',
+          },
+        },
+      },
+      CommentAuthor: {
+        type: 'object',
+        description: 'Public author info only. Deleted accounts: id null, username "Deleted user".',
+        properties: {
+          id: { type: 'string', nullable: true, example: '6650aa119d1e4a0012a3b111' },
+          username: { type: 'string', example: 'player_one' },
+          isDeleted: { type: 'boolean', example: false },
+        },
+      },
+      Comment: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '6718a0c19d1e4a0012a3b601' },
+          gameId: { type: 'string', example: '665f2a1b9d1e4a0012a3b4d9' },
+          content: { type: 'string', description: 'Plain text - render as text, never as HTML.' },
+          author: { $ref: '#/components/schemas/CommentAuthor' },
+          isOwner: {
+            type: 'boolean',
+            description: 'True when the authenticated caller wrote this comment (false for guests).',
+          },
+          isEdited: { type: 'boolean', example: false },
+          editedAt: { type: 'string', format: 'date-time', nullable: true, example: null },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CommentAllowance: {
+        type: 'object',
+        properties: {
+          count: { type: 'integer', minimum: 0, maximum: 5, example: 3 },
+          limit: { type: 'integer', example: 5 },
+          remaining: { type: 'integer', minimum: 0, maximum: 5, example: 2 },
+          canComment: { type: 'boolean', example: true },
+        },
+      },
+      CommentListResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Comments retrieved successfully' },
+          data: { type: 'array', items: { $ref: '#/components/schemas/Comment' } },
+          pagination: { $ref: '#/components/schemas/GamePagination' },
+        },
+      },
+      CommentAllowanceResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Comment allowance retrieved successfully' },
+          data: { $ref: '#/components/schemas/CommentAllowance' },
+        },
+      },
+      CommentMutationResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Comment created successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              comment: { $ref: '#/components/schemas/Comment' },
+              allowance: { $ref: '#/components/schemas/CommentAllowance' },
+            },
+          },
+        },
+      },
+      CommentUpdateResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Comment updated successfully' },
+          data: {
+            type: 'object',
+            properties: { comment: { $ref: '#/components/schemas/Comment' } },
+          },
+        },
+      },
+      CommentDeleteResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: 'Comment deleted successfully' },
+          data: {
+            type: 'object',
+            properties: {
+              deletedCommentId: { type: 'string', example: '6718a0c19d1e4a0012a3b601' },
+              allowance: { $ref: '#/components/schemas/CommentAllowance' },
             },
           },
         },

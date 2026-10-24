@@ -5,7 +5,9 @@ const express = require('express');
 const gameController = require('../controllers/game.controller');
 const gameLikeController = require('../controllers/gameLike.controller');
 const gameRatingController = require('../controllers/gameRating.controller');
+const gameCommentController = require('../controllers/gameComment.controller');
 const validate = require('../middleware/validate.middleware');
+const { createRateLimiter } = require('../middleware/rateLimit.middleware');
 const { requireAuth, optionalAuth, requireRole } = require('../middleware/auth.middleware');
 const {
   idParamRules,
@@ -15,9 +17,27 @@ const {
 } = require('../validators/game.validator');
 const { gameIdParamRules } = require('../validators/gameLike.validator');
 const { submitRatingRules } = require('../validators/gameRating.validator');
+const {
+  contentRules,
+  commentIdParamRules,
+  listCommentsRules,
+} = require('../validators/gameComment.validator');
 const { ROLES } = require('../config/roles');
 
 const router = express.Router();
+
+// Per-user spam guards for comment writes (keyed on the JWT user, so they run
+// after requireAuth). Rejected requests count too.
+const commentCreateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'You are posting comments too quickly',
+});
+const commentWriteLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'You are changing comments too quickly',
+});
 
 /**
  * @openapi
@@ -600,5 +620,380 @@ router
 router
   .route('/:gameId/ratings/summary')
   .get(optionalAuth, gameIdParamRules, validate, gameRatingController.getRatingSummary);
+
+/**
+ * @openapi
+ * /api/games/{gameId}/comments:
+ *   get:
+ *     tags: [Comments]
+ *     summary: List a game's comments (public, limit/offset pagination)
+ *     description: >
+ *       Public - guests can read every comment. Newest first by default
+ *       (`sort=oldest` reverses it); comments with the same `createdAt` are
+ *       ordered by id in the same direction, so pages never overlap or skip.
+ *       `pagination.total` is the game's total comment count. Each comment
+ *       carries a safe `author` (`id`, `username`, `isDeleted` only - never
+ *       email or role); comments whose author account was deleted show
+ *       `username: "Deleted user"`, `id: null`. Optionally send a Bearer token
+ *       to get `isOwner: true` on your own comments (always false for guests).
+ *       A token that is sent but invalid or expired returns 401. `content` is
+ *       plain text and must be rendered as text, never as HTML.
+ *     security:
+ *       - {}
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         description: MongoDB ObjectId of the game
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, minimum: 0, default: 0 }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [newest, oldest], default: newest }
+ *     responses:
+ *       200:
+ *         description: Paginated comments
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentListResponse' }
+ *             example:
+ *               success: true
+ *               message: Comments retrieved successfully
+ *               data:
+ *                 - id: 6718a0c19d1e4a0012a3b601
+ *                   gameId: 665f2a1b9d1e4a0012a3b4d9
+ *                   content: Loved the final puzzle!
+ *                   author: { id: 6650aa119d1e4a0012a3b111, username: player_one, isDeleted: false }
+ *                   isOwner: false
+ *                   isEdited: true
+ *                   editedAt: '2026-10-24T10:05:00.000Z'
+ *                   createdAt: '2026-10-24T10:00:00.000Z'
+ *                   updatedAt: '2026-10-24T10:05:00.000Z'
+ *               pagination: { limit: 10, offset: 0, total: 1, returned: 1, hasMore: false, nextOffset: null }
+ *       400:
+ *         description: Malformed gameId, or invalid limit / offset / sort
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: A token was sent but it is invalid or expired
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *   post:
+ *     tags: [Comments]
+ *     summary: Post a comment (max 5 per user per game)
+ *     description: >
+ *       Authenticated users only; the author is taken from the JWT, never from
+ *       the body. `content` must be a string; it is normalised (Unicode NFC,
+ *       CRLF to LF, control/bidi-override characters removed, 3+ line breaks
+ *       collapsed, trimmed) and must then be 1-1000 characters. It is stored
+ *       as plain text (HTML is not interpreted). Each user can have at most
+ *       **5 comments per game** at a time - limits are independent per game,
+ *       editing does not use a slot and deleting frees one. The limit is
+ *       enforced atomically by a unique index, so concurrent submissions can
+ *       never exceed it; the 6th returns 409 with `code: COMMENT_LIMIT_REACHED`.
+ *       Rate limited to 10 create requests per user per minute (429,
+ *       `code: RATE_LIMITED`, `Retry-After` header).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CommentContentRequest' }
+ *           example: { content: Loved the final puzzle! }
+ *     responses:
+ *       201:
+ *         description: Comment created; includes your updated allowance for this game
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentMutationResponse' }
+ *             example:
+ *               success: true
+ *               message: Comment created successfully
+ *               data:
+ *                 comment:
+ *                   id: 6718a0c19d1e4a0012a3b601
+ *                   gameId: 665f2a1b9d1e4a0012a3b4d9
+ *                   content: Loved the final puzzle!
+ *                   author: { id: 6650aa119d1e4a0012a3b111, username: player_one, isDeleted: false }
+ *                   isOwner: true
+ *                   isEdited: false
+ *                   editedAt: null
+ *                   createdAt: '2026-10-24T10:00:00.000Z'
+ *                   updatedAt: '2026-10-24T10:00:00.000Z'
+ *                 allowance: { count: 3, limit: 5, remaining: 2, canComment: true }
+ *       400:
+ *         description: Malformed gameId, or content missing / not a string / empty / over 1000 characters
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *             example:
+ *               success: false
+ *               message: Validation failed
+ *               errors:
+ *                 - field: content
+ *                   message: content cannot be empty
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       409:
+ *         description: You already have 5 comments on this game
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *             example:
+ *               success: false
+ *               message: You can have at most 5 comments on this game. Delete one of your comments to post a new one.
+ *               code: COMMENT_LIMIT_REACHED
+ *       429:
+ *         description: Too many comment requests
+ *         headers:
+ *           Retry-After:
+ *             schema: { type: integer }
+ *             description: Seconds until the window resets
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *             example:
+ *               success: false
+ *               message: You are posting comments too quickly. Try again in 42 seconds.
+ *               code: RATE_LIMITED
+ */
+router
+  .route('/:gameId/comments')
+  .get(
+    optionalAuth,
+    gameIdParamRules,
+    listCommentsRules,
+    validate,
+    gameCommentController.listComments
+  )
+  .post(
+    requireAuth,
+    commentCreateLimiter,
+    gameIdParamRules,
+    contentRules,
+    validate,
+    gameCommentController.createComment
+  );
+
+/**
+ * @openapi
+ * /api/games/{gameId}/comments/me/count:
+ *   get:
+ *     tags: [Comments]
+ *     summary: Get your comment count and remaining allowance for a game
+ *     description: >
+ *       `count` is how many comments you currently have on this game, `limit`
+ *       is always 5, `remaining` = limit - count and `canComment` is
+ *       `remaining > 0`.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *     responses:
+ *       200:
+ *         description: Your allowance
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentAllowanceResponse' }
+ *             example:
+ *               success: true
+ *               message: Comment allowance retrieved successfully
+ *               data: { count: 3, limit: 5, remaining: 2, canComment: true }
+ *       400:
+ *         description: Malformed gameId
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Game not found
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
+router
+  .route('/:gameId/comments/me/count')
+  .get(requireAuth, gameIdParamRules, validate, gameCommentController.getMyCommentCount);
+
+/**
+ * @openapi
+ * /api/games/{gameId}/comments/{commentId}:
+ *   patch:
+ *     tags: [Comments]
+ *     summary: Edit your own comment
+ *     description: >
+ *       Owner only. Same `content` rules as create. `createdAt` is preserved;
+ *       `isEdited` becomes true and `editedAt` / `updatedAt` are set. Sending
+ *       content identical to the stored text (after normalisation) changes
+ *       nothing and does not mark the comment as edited. Editing never uses
+ *       an extra comment slot. Rate limited together with DELETE to 30
+ *       requests per user per minute.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6718a0c19d1e4a0012a3b601
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CommentContentRequest' }
+ *           example: { content: Loved the final puzzle! (edited) }
+ *     responses:
+ *       200:
+ *         description: The updated comment
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentUpdateResponse' }
+ *       400:
+ *         description: Malformed ids or invalid content
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       403:
+ *         description: The comment belongs to another user
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *             example:
+ *               success: false
+ *               message: You can only modify your own comments
+ *               code: COMMENT_FORBIDDEN
+ *       404:
+ *         description: Comment not found on this game
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       429:
+ *         description: 'Too many comment requests (`code: RATE_LIMITED`)'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *   delete:
+ *     tags: [Comments]
+ *     summary: Delete your own comment
+ *     description: >
+ *       Owner only. Permanently deletes the comment and frees one of your 5
+ *       slots on this game; the response carries your updated allowance.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 665f2a1b9d1e4a0012a3b4d9
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 6718a0c19d1e4a0012a3b601
+ *     responses:
+ *       200:
+ *         description: Comment deleted
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/CommentDeleteResponse' }
+ *             example:
+ *               success: true
+ *               message: Comment deleted successfully
+ *               data:
+ *                 deletedCommentId: 6718a0c19d1e4a0012a3b601
+ *                 allowance: { count: 4, limit: 5, remaining: 1, canComment: true }
+ *       400:
+ *         description: Malformed ids
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       401:
+ *         description: Missing, invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       403:
+ *         description: 'The comment belongs to another user (`code: COMMENT_FORBIDDEN`)'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       404:
+ *         description: Comment not found on this game
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ *       429:
+ *         description: 'Too many comment requests (`code: RATE_LIMITED`)'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ErrorResponse' }
+ */
+router
+  .route('/:gameId/comments/:commentId')
+  .patch(
+    requireAuth,
+    commentWriteLimiter,
+    gameIdParamRules,
+    commentIdParamRules,
+    contentRules,
+    validate,
+    gameCommentController.updateComment
+  )
+  .delete(
+    requireAuth,
+    commentWriteLimiter,
+    gameIdParamRules,
+    commentIdParamRules,
+    validate,
+    gameCommentController.deleteComment
+  );
 
 module.exports = router;

@@ -12,12 +12,18 @@ class ApiError extends Error {
    * @param {object} [options]
    * @param {Array}  [options.details] Optional array of field-level errors
    * @param {boolean}[options.isOperational=true]
+   * @param {string} [options.code] Optional machine-readable code, e.g. COMMENT_LIMIT_REACHED
    */
-  constructor(statusCode, message, { details = undefined, isOperational = true } = {}) {
+  constructor(
+    statusCode,
+    message,
+    { details = undefined, isOperational = true, code = undefined } = {}
+  ) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.details = details;
+    this.code = code;
     this.isOperational = isOperational;
     Error.captureStackTrace(this, this.constructor);
   }
